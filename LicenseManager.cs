@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using NSec.Cryptography;
@@ -104,7 +104,7 @@ internal static class LicenseManager
                              license.ExpiresAtUtc is null;
         if (legacyLicense)
         {
-            payloadText = $"ezScreenShot\\n1\\n{license.MachineCode}\\n{license.Licensee.Trim()}";
+            payloadText = $"ezScreenShot\n1\n{license.MachineCode}\n{license.Licensee.Trim()}";
         }
         else
         {
@@ -141,7 +141,7 @@ internal static class LicenseManager
             if (issuedAt > DateTimeOffset.UtcNow.AddMinutes(5))
                 return false;
 
-            payloadText = $"ezScreenShot\\n1\\n{license.MachineCode}\\n{license.Licensee.Trim()}\\n{license.IssuedAtUtc}\\n{expiryText}";
+            payloadText = $"ezScreenShot\n1\n{license.MachineCode}\n{license.Licensee.Trim()}\n{license.IssuedAtUtc}\n{expiryText}";
         }
 
         byte[] payload = Encoding.UTF8.GetBytes(payloadText);

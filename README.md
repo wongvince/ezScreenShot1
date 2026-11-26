@@ -25,16 +25,18 @@ Windows 托盘截图工具，.NET 8 WinForms，支持自定义截图区域、快
 3. 签发方使用与程序内置公钥匹配的 Ed25519 私钥，在离线环境生成授权 JSON。
 4. 将授权 JSON 发回用户，在激活窗口点击“导入授权文件”。
 
-授权签名覆盖的 UTF-8 内容为以下四行（行间使用 LF 换行，末尾不额外添加换行）：
+新版授权签名覆盖以下 UTF-8 内容（行间使用 LF 换行，末尾不额外添加换行）：
 
 ```text
 ezScreenShot
 1
 机器码
 授权对象名称
+签发时间（UTC，ISO 8601）
+到期时间（UTC，ISO 8601；永久时为 PERPETUAL）
 ```
 
-授权 JSON 字段：`product`、`version`、`machineCode`、`licensee`、`signature`。其中 `signature` 是上述内容的 Ed25519 签名的 Base64。
+新版授权 JSON 字段：`product`、`version`、`machineCode`、`licensee`、`issuedAtUtc`、`expiresAtUtc`、`signature`。旧版永久授权（没有期限字段）仍按旧四行签名规则兼容验证。
 
 ### 离线签发示例
 

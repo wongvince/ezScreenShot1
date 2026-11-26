@@ -42,8 +42,8 @@ else:
     expiry_payload = expires_text
 
 payload = (
-    f"ezScreenShot\\n1\\n{machine_code}\\n{licensee}\\n"
-    f"{issued_text}\\n{expiry_payload}"
+    f"ezScreenShot\n1\n{machine_code}\n{licensee}\n"
+    f"{issued_text}\n{expiry_payload}"
 ).encode("utf-8")
 signature = private_key.sign(payload)
 
