@@ -25,18 +25,18 @@ Windows 托盘截图工具，.NET 8 WinForms，支持自定义截图区域、快
 3. 签发方使用与程序内置公钥匹配的 Ed25519 私钥，在离线环境生成授权 JSON。
 4. 将授权 JSON 发回用户，在激活窗口点击“导入授权文件”。
 
-新版授权签名覆盖以下 UTF-8 内容（行间使用 LF 换行，末尾不额外添加换行）：
+授权签名与本地授权管理器统一为以下六行 UTF-8 内容（行间使用 LF 换行，末尾不额外添加换行）：
 
 ```text
 ezScreenShot
 1
 机器码
 授权对象名称
-签发时间（UTC，ISO 8601）
-到期时间（UTC，ISO 8601；永久时为 PERPETUAL）
+UTC签发时间
+UTC到期时间或 PERPETUAL
 ```
 
-新版授权 JSON 字段：`product`、`version`、`machineCode`、`licensee`、`issuedAtUtc`、`expiresAtUtc`、`signature`。旧版永久授权（没有期限字段）仍按旧四行签名规则兼容验证。
+授权 JSON 字段：`product`、`version`、`machineCode`、`licensee`、`issuedAtUtc`、`expiresAtUtc`、`signature`。`expiresAtUtc` 为 `null` 表示永久授权；签名覆盖的最后一行此时为 `PERPETUAL`。客户端验证签名、机器码、签发时间和到期时间，并允许最多 5 分钟的系统时钟偏差。
 
 ### 离线签发示例
 
@@ -59,12 +59,3 @@ MCowBQYDK2VwAyEABLHkBjACjcxTjOw2P6yQUuTOau4hTVzp6/1NgtH9he4=
 ```
 
 如果这把公钥没有对应的私钥，或签发私钥与它不匹配，就无法生成可通过验证的授权文件。机器码基于 Windows MachineGuid 计算；重装系统或更换系统身份信息后，机器码可能变化，需要重新签发。
-
-
-## 授权期限（新版）
-
-新版授权 JSON 增加 `issuedAtUtc` 和 `expiresAtUtc` 两个 UTC 时间字段。签名覆盖机器码、授权对象、签发时间和到期时间，客户端会在启动及导入授权时验证期限。
-
-授权期限支持：`0`（永久）、`7`、`30`、`90`、`365` 天。旧版没有期限字段的授权文件仍按原签名规则兼容验证。
-
-离线授权依赖电脑系统 UTC 时间；如果用户手动回拨系统时钟，纯离线程序无法可靠地向远端核验真实时间。

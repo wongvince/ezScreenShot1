@@ -11,7 +11,6 @@ internal sealed class LicenseDocument
     public int Version { get; set; }
     public string MachineCode { get; set; } = "";
     public string Licensee { get; set; } = "";
-    // 新版授权字段：UTC ISO 8601（"O" 格式）。旧版授权缺少这两个字段时按旧签名规则验证。
     public string IssuedAtUtc { get; set; } = "";
     public string? ExpiresAtUtc { get; set; }
     public string Signature { get; set; } = "";
@@ -19,8 +18,9 @@ internal sealed class LicenseDocument
 
 internal static class LicenseManager
 {
-    // Ed25519 SubjectPublicKeyInfo（SPKI），由软件发布者提供。
+    // Ed25519 SPKI 公钥；与本地授权管理器使用同一把公钥。
     private const string PublicKeyBase64 = "MCowBQYDK2VwAyEABLHkBjACjcxTjOw2P6yQUuTOau4hTVzp6/1NgtH9he4=";
+    private static readonly byte[] SpkiPrefix = Convert.FromHexString("302A300506032B6570032100");
     private static readonly string LicensePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ezScreenShot", "license.json");
@@ -47,7 +47,8 @@ internal static class LicenseManager
         try
         {
             if (!File.Exists(LicensePath)) return false;
-            var license = JsonSerializer.Deserialize<LicenseDocument>(File.ReadAllText(LicensePath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var license = JsonSerializer.Deserialize<LicenseDocument>(File.ReadAllText(LicensePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             return license is not null && Verify(license);
         }
         catch { return false; }
@@ -57,10 +58,11 @@ internal static class LicenseManager
     {
         try
         {
-            var license = JsonSerializer.Deserialize<LicenseDocument>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var license = JsonSerializer.Deserialize<LicenseDocument>(File.ReadAllText(path),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (license is null || !Verify(license))
             {
-                error = "授权文件无效，或授权并非签发给这台电脑。";
+                error = "授权验证失败：签名、公钥、机器码或授权期限不匹配。请确认使用配套授权管理器生成的 JSON 文件，并检查电脑系统时间。";
                 return false;
             }
 
@@ -71,7 +73,7 @@ internal static class LicenseManager
         }
         catch (Exception ex)
         {
-            error = "无法读取授权文件：" + ex.Message;
+            error = "无法读取或验证授权文件：" + ex.Message;
             return false;
         }
     }
@@ -80,71 +82,54 @@ internal static class LicenseManager
     {
         if (license.Product != "ezScreenShot" || license.Version != 1 ||
             !string.Equals(license.MachineCode, GetMachineCode(), StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(license.Licensee) || string.IsNullOrWhiteSpace(license.Signature))
+            string.IsNullOrWhiteSpace(license.Licensee) ||
+            string.IsNullOrWhiteSpace(license.IssuedAtUtc) ||
+            string.IsNullOrWhiteSpace(license.Signature))
             return false;
+
+        // 时间字段必须是有效的 ISO 8601 UTC 时间；允许最多 5 分钟系统时钟偏差。
+        if (!DateTimeOffset.TryParse(license.IssuedAtUtc,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var issuedAt))
+            return false;
+
+        var now = DateTimeOffset.UtcNow;
+        if (issuedAt > now.AddMinutes(5)) return false;
+
+        string expiryPayload;
+        if (license.ExpiresAtUtc is null)
+        {
+            expiryPayload = "PERPETUAL";
+        }
+        else
+        {
+            if (!DateTimeOffset.TryParse(license.ExpiresAtUtc,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var expiresAt))
+                return false;
+            if (expiresAt <= issuedAt || now >= expiresAt) return false;
+            expiryPayload = license.ExpiresAtUtc;
+        }
 
         byte[] signature;
         try { signature = Convert.FromBase64String(license.Signature); }
         catch { return false; }
+        if (signature.Length != 64) return false;
 
-        // 配置中的公钥是标准 DER SubjectPublicKeyInfo（SPKI）Base64。
-        // NSec 的 Ed25519 导入接口使用 32 字节 RawPublicKey，因此先校验并提取原始公钥。
-        byte[] spki = Convert.FromBase64String(PublicKeyBase64);
-        byte[] spkiPrefix = Convert.FromHexString("302A300506032B6570032100");
-        if (spki.Length != spkiPrefix.Length + 32 ||
-            !spki.AsSpan(0, spkiPrefix.Length).SequenceEqual(spkiPrefix))
+        // 将 SPKI DER 公钥提取为 NSec 所需的 32 字节 RawPublicKey。
+        byte[] spki;
+        try { spki = Convert.FromBase64String(PublicKeyBase64); }
+        catch { return false; }
+        if (spki.Length != SpkiPrefix.Length + 32 ||
+            !spki.AsSpan(0, SpkiPrefix.Length).SequenceEqual(SpkiPrefix))
             return false;
 
-        byte[] rawPublicKey = spki.AsSpan(spkiPrefix.Length, 32).ToArray();
+        byte[] rawPublicKey = spki.AsSpan(SpkiPrefix.Length, 32).ToArray();
         var publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, rawPublicKey, KeyBlobFormat.RawPublicKey);
-        string payloadText;
 
-        // 兼容升级前已经签发的旧版永久授权。
-        bool legacyLicense = string.IsNullOrWhiteSpace(license.IssuedAtUtc) &&
-                             license.ExpiresAtUtc is null;
-        if (legacyLicense)
-        {
-            payloadText = $"ezScreenShot\n1\n{license.MachineCode}\n{license.Licensee.Trim()}";
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(license.IssuedAtUtc))
-                return false;
-
-            if (!DateTimeOffset.TryParseExact(
-                    license.IssuedAtUtc, "O",
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.RoundtripKind,
-                    out DateTimeOffset issuedAt) || issuedAt.Offset != TimeSpan.Zero)
-                return false;
-
-            string expiryText;
-            if (license.ExpiresAtUtc is null)
-            {
-                expiryText = "PERPETUAL";
-            }
-            else
-            {
-                if (!DateTimeOffset.TryParseExact(
-                        license.ExpiresAtUtc, "O",
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out DateTimeOffset expiresAt) || expiresAt.Offset != TimeSpan.Zero)
-                    return false;
-
-                if (expiresAt <= issuedAt || DateTimeOffset.UtcNow >= expiresAt)
-                    return false;
-
-                expiryText = license.ExpiresAtUtc;
-            }
-
-            if (issuedAt > DateTimeOffset.UtcNow.AddMinutes(5))
-                return false;
-
-            payloadText = $"ezScreenShot\n1\n{license.MachineCode}\n{license.Licensee.Trim()}\n{license.IssuedAtUtc}\n{expiryText}";
-        }
-
-        byte[] payload = Encoding.UTF8.GetBytes(payloadText);
+        // 必须与授权管理器 MainForm.GenerateLicense() 的六行 payload 完全一致。
+        byte[] payload = Encoding.UTF8.GetBytes(
+            $"ezScreenShot\n1\n{license.MachineCode}\n{license.Licensee.Trim()}\n{license.IssuedAtUtc}\n{expiryPayload}");
         return SignatureAlgorithm.Ed25519.Verify(publicKey, payload, signature);
     }
 }
