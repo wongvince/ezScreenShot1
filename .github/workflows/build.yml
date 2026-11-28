@@ -16,8 +16,22 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Publish self-contained single-file app
-        run: dotnet publish ezScreenShot.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - name: Publish compressed self-contained single-file app
+        run: >-
+          dotnet publish ezScreenShot.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -o publish
+      - name: Show publish output
+        shell: pwsh
+        run: |
+          Get-ChildItem publish -File | Select-Object Name, Length
       - name: Package
         run: Compress-Archive -Path publish/* -DestinationPath ezScreenShot-Windows-x64.zip
       - name: Upload artifact
