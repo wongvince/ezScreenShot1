@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using NSec.Cryptography;
@@ -52,6 +52,28 @@ internal static class LicenseManager
             return license is not null && Verify(license);
         }
         catch { return false; }
+    }
+
+    public static string GetStatusText()
+    {
+        try
+        {
+            if (!File.Exists(LicensePath)) return "授权状态：尚未激活";
+            var license = JsonSerializer.Deserialize<LicenseDocument>(File.ReadAllText(LicensePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (license is null || !Verify(license))
+                return "授权状态：未激活（本机授权文件无效或已过期）";
+
+            string expiry = license.ExpiresAtUtc is null
+                ? "永久有效"
+                : DateTimeOffset.Parse(license.ExpiresAtUtc, System.Globalization.CultureInfo.InvariantCulture)
+                    .ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+            return $"授权状态：已激活\r\n授权对象：{license.Licensee}\r\n有效期：{expiry}";
+        }
+        catch
+        {
+            return "授权状态：未激活（无法读取授权文件）";
+        }
     }
 
     public static bool TryImport(string path, out string error)
@@ -138,29 +160,36 @@ internal sealed class LicenseDialog : Form
 {
     public LicenseDialog()
     {
-        Text = "ezScreenShot 授权激活";
+        Text = "ezScreenShot 软件授权";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = true;
-        ClientSize = new Size(540, 220);
+        ClientSize = new Size(560, 300);
         Font = new Font("Microsoft YaHei UI", 9F);
 
         Controls.Add(new Label
         {
+            Text = LicenseManager.GetStatusText(),
+            Location = new Point(18, 16), Size = new Size(520, 66),
+            ForeColor = LicenseManager.IsLicensed() ? Color.DarkGreen : Color.DarkRed
+        });
+
+        Controls.Add(new Label
+        {
             Text = "本软件采用电脑绑定授权。请复制下方机器码发给授权签发方，取得授权文件后导入。",
-            Location = new Point(18, 18), Size = new Size(505, 42)
+            Location = new Point(18, 88), Size = new Size(520, 42)
         });
 
         var machineCode = new TextBox
         {
             Text = LicenseManager.GetMachineCode(), ReadOnly = true,
-            Location = new Point(18, 70), Size = new Size(385, 28), Font = new Font("Consolas", 11F)
+            Location = new Point(18, 138), Size = new Size(400, 28), Font = new Font("Consolas", 11F)
         };
         Controls.Add(machineCode);
 
-        var copy = new Button { Text = "复制机器码", Location = new Point(412, 68), Size = new Size(105, 30) };
+        var copy = new Button { Text = "复制机器码", Location = new Point(428, 136), Size = new Size(105, 30) };
         copy.Click += (_, _) =>
         {
             Clipboard.SetText(machineCode.Text);
@@ -170,17 +199,17 @@ internal sealed class LicenseDialog : Form
 
         Controls.Add(new Label
         {
-            Text = "授权文件由授权签发方提供，导入成功后即可启动软件。",
-            Location = new Point(18, 112), Size = new Size(500, 24)
+            Text = "如需续期或更换授权，请导入授权签发方提供的 JSON 文件。",
+            Location = new Point(18, 180), Size = new Size(520, 24)
         });
 
-        var import = new Button { Text = "导入授权文件…", Location = new Point(294, 165), Size = new Size(112, 32) };
+        var import = new Button { Text = "导入/更新授权…", Location = new Point(300, 238), Size = new Size(125, 34) };
         import.Click += (_, _) => ImportLicense();
         Controls.Add(import);
 
-        var exit = new Button { Text = "退出", DialogResult = DialogResult.Cancel, Location = new Point(420, 165), Size = new Size(96, 32) };
-        Controls.Add(exit);
-        CancelButton = exit;
+        var close = new Button { Text = "关闭", DialogResult = DialogResult.Cancel, Location = new Point(438, 238), Size = new Size(95, 34) };
+        Controls.Add(close);
+        CancelButton = close;
     }
 
     private void ImportLicense()

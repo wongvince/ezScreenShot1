@@ -77,6 +77,11 @@ internal sealed class App : ApplicationContext
         m.Items.Add("选择/更改截图区域…", null, (_, _) => ChooseRegion());
         m.Items.Add("选择/更改保存文件夹…", null, (_, _) => ChooseFolder());
         m.Items.Add("打开保存文件夹", null, (_, _) => OpenFolder());
+        m.Items.Add("软件授权…", null, (_, _) =>
+        {
+            using var licenseDialog = new LicenseDialog();
+            licenseDialog.ShowDialog();
+        });
         m.Items.Add("复制本机授权机器码", null, (_, _) =>
         {
             Clipboard.SetText(LicenseManager.GetMachineCode());
