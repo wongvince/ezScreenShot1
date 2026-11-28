@@ -9,6 +9,8 @@
     <ApplicationIcon>ezScreenShot.ico</ApplicationIcon>
     <AssemblyName>ezScreenShot</AssemblyName>
     <RootNamespace>DeviceCheckScreenshot</RootNamespace>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NSec.Cryptography" Version="24.4.0" />

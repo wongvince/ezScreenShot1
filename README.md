@@ -18,6 +18,15 @@ Windows 托盘截图工具，.NET 8 WinForms，支持自定义截图区域、快
 
 构建产物名称：`ezScreenShot-Windows-x64.zip`。
 
+### EXE 体积优化（v8）
+
+- 保留 `--self-contained true`：用户电脑不需要预先安装 .NET 8 Desktop Runtime。
+- 启用 `EnableCompressionInSingleFile`：压缩单文件发布包，减少 EXE 体积；首次启动可能有轻微解压开销。
+- 关闭 PDB/调试符号输出，避免发布包携带无用的调试文件。
+- 不启用 trimming：WinForms 和授权依赖存在反射/动态使用风险，贸然裁剪可能导致程序运行异常。
+
+注意：压缩效果取决于 .NET 运行库和依赖内容，必须以 GitHub Actions 实际生成的 EXE 大小为准；压缩不保证能从约 155 MB 降到几 MB。
+
 ## 电脑绑定授权流程
 
 1. 启动程序，在激活窗口复制机器码。
